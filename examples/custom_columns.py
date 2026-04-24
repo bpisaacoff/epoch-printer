@@ -100,3 +100,22 @@ auto_printer = EpochTablePrinter(
 auto_printer.print_header()
 auto_printer.print_row({"epoch": 1, "train_loss": 0.1842, "val_loss": 0.2108, "lr": 1e-3})
 auto_printer.print_row({"epoch": 2, "train_loss": 0.1391, "val_loss": 0.1794, "lr": 5e-4})
+
+print()
+
+# --- Line options: vertical column separators and horizontal row rules ---
+
+print("Vertical lines between columns and horizontal rules between rows:")
+
+line_cols = [
+    MetricCol("epoch", "Ep", width=4, fmt="d"),
+    MetricCol("train_loss", "TrainLoss", width=12, fmt=".4e"),
+    MetricCol("val_loss", "ValLoss", width=12, fmt=".4e"),
+    MetricCol("lr", "LR", width=10, fmt=".2e"),
+]
+
+line_printer = EpochTablePrinter(line_cols, vertical_lines=True, row_lines=True)
+line_printer.print_header()
+line_printer.print_row({"epoch": 1, "train_loss": 0.1842, "val_loss": 0.2108, "lr": 1e-3})
+line_printer.print_row({"epoch": 2, "train_loss": 0.1238, "val_loss": 0.1554, "lr": 7.5e-4})
+line_printer.print_row({"epoch": 3, "train_loss": 0.0981, "val_loss": 0.1203, "lr": 5e-4})

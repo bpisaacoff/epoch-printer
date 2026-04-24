@@ -173,6 +173,22 @@ printer.format_header()
 printer.format_row(row)
 ```
 
+**Constructor parameters:**
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `columns` | — | Ordered sequence of `MetricCol` definitions |
+| `sep` | `"  "` | Separator string between columns |
+| `missing` | `"--"` | Placeholder for absent keys |
+| `header_rule` | `True` | Print a dashed rule beneath the header row |
+| `vertical_lines` | `False` | Print `\|` separators between columns |
+| `row_lines` | `False` | Print a dashed rule after every data row |
+
+```python
+# Example with all line options enabled:
+printer = EpochTablePrinter(columns, vertical_lines=True, row_lines=True)
+```
+
 ### Column helpers
 
 | Function | Description |

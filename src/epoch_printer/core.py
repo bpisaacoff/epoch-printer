@@ -59,6 +59,12 @@ class EpochTablePrinter:
         Separator string between columns.
     missing:
         Placeholder displayed when a key is absent from a row.
+    header_rule:
+        Print a dashed horizontal rule beneath the header row.
+    vertical_lines:
+        Print ``" | "`` separators between columns instead of ``sep``.
+    row_lines:
+        Print a dashed horizontal rule after every data row.
     """
 
     def __init__(
@@ -66,28 +72,43 @@ class EpochTablePrinter:
         columns: Sequence[MetricCol],
         sep: str = "  ",
         missing: str = "--",
+        header_rule: bool = True,
+        vertical_lines: bool = False,
+        row_lines: bool = False,
     ) -> None:
         self.columns = list(columns)
         self.sep = sep
         self.missing = missing
+        self.header_rule = header_rule
+        self.vertical_lines = vertical_lines
+        self.row_lines = row_lines
+
+    @property
+    def _sep(self) -> str:
+        return " | " if self.vertical_lines else self.sep
 
     def header_str(self) -> str:
         """Return the header line as a string."""
         parts = [f"{col.effective_title:{col.align}{col.effective_width}}" for col in self.columns]
-        return self.sep.join(parts)
+        return self._sep.join(parts)
 
     def rule_str(self) -> str:
         """Return a horizontal rule matching the header width."""
         return "-" * len(self.header_str())
 
     def format_header(self) -> str:
-        """Return the header and rule as a single string."""
-        return f"{self.header_str()}\n{self.rule_str()}"
+        """Return the header (and optional rule) as a single string."""
+        if self.header_rule:
+            return f"{self.header_str()}\n{self.rule_str()}"
+        return self.header_str()
 
     def format_row(self, row: Mapping[str, Any]) -> str:
         """Format a row mapping as a fixed-width string."""
         parts = [self._format_cell(col, row.get(col.key)) for col in self.columns]
-        return self.sep.join(parts)
+        line = self._sep.join(parts)
+        if self.row_lines:
+            return f"{line}\n{self.rule_str()}"
+        return line
 
     def print_header(self) -> None:
         """Print the header and rule."""
