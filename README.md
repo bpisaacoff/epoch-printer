@@ -1,50 +1,26 @@
 # epoch-printer
 
-Lightweight fixed-width metric table printer for ML training loops.
+Readable fixed-width epoch tables for ML training loops, with no required dependencies.
 
 ```
   Ep          LR    TrainLoss      ValLoss      T_MAE      V_MAE     T_RMSE     V_RMSE   V_Corr   V_ExpVar      Time
 -----------------------------------------------------------------------------------------------------------------
    1    1.0000e-03  1.8421e-01  2.1077e-01  1.920e-02  2.150e-02  4.510e-02  4.910e-02    0.781      0.612     12.47
    2    7.5000e-04  1.2376e-01  1.5542e-01  1.480e-02  1.740e-02  3.730e-02  4.110e-02    0.829      0.691     11.93
+   3    5.0000e-04  9.1040e-02  1.2010e-01  1.210e-02  1.480e-02  3.140e-02  3.720e-02    0.863      0.744     11.64
 ```
 
-## What it is
+## Why use this?
 
-`epoch-printer` gives you a simple, reusable way to turn dictionaries of metrics into stable, readable epoch-by-epoch output in terminals, notebooks, scripts, and IDE consoles.
+Training loop output usually falls into one of three patterns:
 
-Two core ideas:
+1. `print(f"epoch {epoch}, loss {loss:.4f}")` — fine for 2 metrics, messy for 10.
+2. Full experiment trackers (W&B, MLflow, TensorBoard) — great for dashboards, overkill for a terminal window.
+3. Custom formatting code — rewritten per project, fragile when the metric set changes.
 
-- `MetricCol` describes how each metric should be displayed.
-- `EpochTablePrinter` renders a consistent fixed-width table from those column definitions.
+`epoch-printer` gives you a fixed-width table that is easy to scan while training is running, defined once per project, and portable across scripts, notebooks, and IDE consoles. It handles missing values, `nan`/`inf`, and column alignment automatically.
 
-## What problem it solves
-
-In iterative R&D, experiment logging usually falls into one of three unsatisfying patterns:
-
-1. Raw `print()` calls become noisy and inconsistent.
-2. Full experiment-tracking platforms are too heavy for quick iteration.
-3. Notebook displays look fine after the run but don't help much while it is happening.
-
-`epoch-printer` sits in the middle. It gives you:
-
-- fixed-width aligned output that is easy to scan while training is running
-- a reusable schema instead of hand-formatting each line
-- graceful handling of missing metrics, `nan`, and `inf`
-- custom transforms and per-metric formatting
-- a path from live console printing to notebook-friendly DataFrame summaries
-
-## When it is useful
-
-Any time you have repeated metric updates across epochs, steps, or evaluation cycles:
-
-- supervised learning training loops
-- validation runs and fine-tuning experiments
-- ablation studies and hyperparameter sweeps
-- notebook-based experimentation
-- IDE console workflows where readability matters
-
-Although the name says "epoch," the same pattern works for optimization steps, evaluation checkpoints, curriculum stages, and outer-loop search iterations.
+This is **not a replacement for experiment trackers**. Use it alongside W&B or MLflow for readable stdout while your dashboard updates in the background.
 
 ## Installation
 
@@ -52,112 +28,148 @@ Although the name says "epoch," the same pattern works for optimization steps, e
 pip install epoch-printer
 ```
 
-With optional pandas support for DataFrame helpers:
+With optional pandas support for DataFrame summaries:
 
 ```bash
 pip install "epoch-printer[pandas]"
 ```
 
-## Quick start
+## 30-second example
+
+Paste into an existing training loop:
 
 ```python
+import time
 from epoch_printer import EpochPrinter, make_epoch_columns
 
 printer = EpochPrinter(make_epoch_columns())
 printer.print_header()
 
 for epoch in range(1, num_epochs + 1):
-    metrics = train_one_epoch(...)   # returns a dict
-    printer.print_row(metrics)
+    t0 = time.time()
+    train_metrics = train_one_epoch(model, loader, optimizer)
+    val_metrics   = evaluate(model, val_loader)
+    scheduler.step()
+
+    printer.print_row({
+        "epoch":      epoch,
+        "lr":         scheduler.get_last_lr()[0],
+        "train_loss": train_metrics["loss"],
+        "val_loss":   val_metrics["loss"],
+        "val_mae":    val_metrics["mae"],
+        "time":       time.time() - t0,
+    })
 ```
 
-## Usage examples
+`make_epoch_columns()` provides a default schema (epoch, LR, loss, MAE, RMSE, correlation, explained variance, time). Keys absent from the row dict render as `--`.
 
-### Standard training loop
+## Common workflows
+
+### PyTorch / JAX-style training loop
+
+See [`examples/pytorch_training_loop.py`](examples/pytorch_training_loop.py) for a self-contained example shaped like a real PyTorch training run (no PyTorch required — model and loader are mocked).
+
+To append project-specific columns alongside the defaults:
 
 ```python
 from epoch_printer import EpochPrinter, MetricCol, make_epoch_columns
 
 printer = EpochPrinter(
     make_epoch_columns([
-        MetricCol("val_mape", "V_MAPE", width=9, fmt=".2%"),
-        MetricCol("val_acc_1e_2", "V_Acc1e-2", width=10, fmt=".2%"),
+        MetricCol("val_acc",   "V_Acc",   width=8, fmt=".2%"),
+        MetricCol("grad_norm", "GradNorm", width=9, fmt=".3f"),
     ])
 )
-
 printer.print_header()
-
-for epoch in range(1, num_epochs + 1):
-    row = {"epoch": epoch, "lr": scheduler.get_lr(), "train_loss": ..., "time": ...}
-    printer.print_row(row)
 ```
 
-### Custom column schema
+### Custom research metrics
+
+When the default schema does not match your experiment, build your own column list:
 
 ```python
 from epoch_printer import EpochTablePrinter, MetricCol, ensure_time_last
 
 columns = ensure_time_last([
-    MetricCol("epoch",      "Ep",        width=4,  fmt="d"),
-    MetricCol("lr",         "LR",        width=10, fmt=".2e"),
-    MetricCol("train_loss", "TrainLoss", width=12, fmt=".4e"),
-    MetricCol("val_loss",   "ValLoss",   width=12, fmt=".4e"),
-    MetricCol("grad_norm",  "GradNorm",  width=9,  fmt=".3f"),
-    MetricCol("clip_frac",  "ClipFrac",  width=9,  fmt=".2%"),
-    MetricCol("throughput", "Samples/s", width=10, fmt=".0f"),
+    MetricCol("epoch",      "Ep",       width=4,  fmt="d"),
+    MetricCol("lr",         "LR",       width=10, fmt=".2e"),
+    MetricCol("recon_loss", "Recon",    width=12, fmt=".4e"),
+    MetricCol("kl_div",     "KL",       width=10, fmt=".4e"),
+    MetricCol("grad_norm",  "GradNorm", width=9,  fmt=".3f"),
+    MetricCol("throughput", "Samp/s",   width=8,  fmt=".0f"),
 ])
 
 printer = EpochTablePrinter(columns)
 printer.print_header()
-printer.print_row(row)
 ```
 
-### Value transforms
-
-Apply a function to a raw value before it is formatted. Useful for unit conversions or derived statistics:
+Apply a transform to convert raw values before display (e.g. MiB → GiB):
 
 ```python
-# Display GPU memory in GiB even though the raw value is in MiB
-MetricCol("gpu_mem_mb", "GPU_GB", width=8, fmt=".2f", transform=lambda x: x / 1024)
+MetricCol("gpu_mem_mb", "GPU_GiB", width=8, fmt=".2f", transform=lambda x: x / 1024)
 ```
 
-### Missing values, nan, and inf
+See [`examples/custom_research_metrics.py`](examples/custom_research_metrics.py) for more patterns including VAE training and table formatting options.
 
-If a key is absent from the row dict, the printer inserts a placeholder (`--` by default).
-`nan` and `inf` are rendered as the strings `"nan"`, `"inf"`, and `"-inf"` rather than raising.
+### Notebook summaries
+
+Collect rows during training, then convert to a styled DataFrame at the end of the cell:
 
 ```python
-printer.print_row({"epoch": 1})                        # missing keys show "--"
-printer.print_row({"epoch": 2, "score": float("nan")}) # shows "nan"
+from epoch_printer import (
+    EpochPrinter, make_epoch_columns,
+    results_to_dataframe, style_results_dataframe,
+)
+
+results = []
+printer = EpochPrinter(make_epoch_columns())
+printer.print_header()
+
+for epoch in range(1, num_epochs + 1):
+    row = {"epoch": epoch, "lr": ..., "train_loss": ..., "val_loss": ..., "time": ...}
+    printer.print_row(row)
+    results.append(row)
+
+# At end of notebook cell — renders as styled HTML table in Jupyter:
+style_results_dataframe(results_to_dataframe(results))
 ```
 
-### Notebook workflow
+See [`examples/notebook_summary.py`](examples/notebook_summary.py) for a runnable version.
 
-Collect rows during training, then convert to a styled DataFrame at the end:
+### Alongside W&B / TensorBoard / MLflow
+
+`epoch-printer` only writes to stdout. Pass the same row dict to your experiment tracker:
 
 ```python
-from epoch_printer import results_to_dataframe, style_results_dataframe
+import wandb
+from epoch_printer import EpochPrinter, make_epoch_columns
 
-results = []  # accumulate row dicts during training
+wandb.init(project="my-experiment")
+printer = EpochPrinter(make_epoch_columns())
+printer.print_header()
 
-df = results_to_dataframe(results)
-style_results_dataframe(df)   # renders as a styled HTML table in Jupyter
+for epoch in range(1, num_epochs + 1):
+    row = {"epoch": epoch, "lr": ..., "train_loss": ..., "val_loss": ..., "time": ...}
+    wandb.log(row, step=epoch)   # to W&B
+    printer.print_row(row)       # to stdout
 ```
+
+See [`examples/logger_integration.py`](examples/logger_integration.py) for a version that also mocks TensorBoard and MLflow log calls.
 
 ## API overview
 
 ### `MetricCol`
 
-A frozen dataclass that defines one column.
+Frozen dataclass defining one column.
 
 | Field | Default | Description |
 |-------|---------|-------------|
 | `key` | — | Key expected in each row dict |
 | `title` | `None` | Header label; defaults to `key` if omitted |
 | `width` | `None` | Fixed display width; defaults to `len(title)` if omitted |
-| `fmt` | `".4f"` | Python format specifier |
-| `align` | `">"` | Alignment: `">"`, `"<"`, or `"^"` |
-| `transform` | `None` | Optional callable applied before formatting |
+| `fmt` | `".4f"` | Python format specifier (e.g. `"d"`, `".2e"`, `".2%"`, `"s"`) |
+| `align` | `">"` | Alignment: `">"` (right), `"<"` (left), or `"^"` (center) |
+| `transform` | `None` | Optional callable applied to the raw value before formatting |
 
 ### `EpochTablePrinter` / `EpochPrinter`
 
@@ -165,57 +177,57 @@ A frozen dataclass that defines one column.
 
 ```python
 printer = EpochTablePrinter(columns, sep="  ", missing="--")
-printer.print_header()
-printer.print_row(row)
+printer.print_header()     # print header + rule to stdout
+printer.print_row(row)     # print one formatted row
 
-# String forms without side effects:
-printer.format_header()
-printer.format_row(row)
+# Non-printing string forms:
+printer.format_header()    # returns header string
+printer.format_row(row)    # returns formatted row string
 ```
-
-**Constructor parameters:**
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `columns` | — | Ordered sequence of `MetricCol` definitions |
-| `sep` | `"  "` | Separator string between columns |
-| `missing` | `"--"` | Placeholder for absent keys |
-| `header_rule` | `True` | Print a dashed rule beneath the header row |
-| `vertical_lines` | `False` | Print `\|` separators between columns |
-| `row_lines` | `False` | Print a dashed rule after every data row |
-
-```python
-# Example with all line options enabled:
-printer = EpochTablePrinter(columns, vertical_lines=True, row_lines=True)
-```
+| `sep` | `"  "` | Separator between columns |
+| `missing` | `"--"` | Placeholder for absent or `None` keys |
+| `header_rule` | `True` | Dashed rule beneath the header |
+| `vertical_lines` | `False` | `" | "` separators between columns |
+| `row_lines` | `False` | Dashed rule after every data row |
 
 ### Column helpers
 
 | Function | Description |
 |----------|-------------|
-| `make_time_column()` | Returns the default `"time"` column |
-| `ensure_time_last(cols)` | Moves/appends the time column to the end |
+| `make_time_column()` | Returns the default `"time"` column (width 8, `.2f`) |
+| `ensure_time_last(cols)` | Moves or appends the time column to the end |
 | `build_default_epoch_columns()` | Full default schema: epoch, LR, loss, MAE, RMSE, corr, explained var, time |
 | `make_epoch_columns(extra_cols)` | Default schema plus your extra columns, time last |
 
-### DataFrame helpers (optional pandas)
+### DataFrame helpers (requires pandas)
 
 | Function | Description |
 |----------|-------------|
 | `results_to_dataframe(rows)` | Converts a list of row dicts to a DataFrame |
 | `style_results_dataframe(df)` | Returns a pandas Styler with standard metric formatting |
 
-These require pandas. Install with `pip install pandas` or `pip install "epoch-printer[pandas]"`. Calling them without pandas installed raises a clear `ImportError`.
+Install with `pip install pandas` or `pip install "epoch-printer[pandas]"`.
 
-## Design philosophy
+## Design choices
 
-- **No required dependencies** — standard library only for core functionality.
-- **Portable** — works in scripts, notebooks, and IDE consoles without configuration.
-- **Explicit** — every displayed metric is declared in a column schema; nothing is inferred silently.
-- **Composable** — start with defaults and extend with project-specific columns.
-- **Stable** — columns never shift position from row to row.
-- **Small** — a focused utility, not a platform.
+- **No required dependencies.** Core functionality uses only the standard library.
+- **Explicit schema.** Every displayed metric is declared in a column definition; nothing is inferred silently.
+- **Stable column order.** Positions never shift from row to row, making it easy to scan vertically during a long run.
+- **Row dicts, not keyword arguments.** The same dict you pass to `wandb.log` or `mlflow.log_metrics` works here without modification.
+- **Portable.** Plain-text output works in terminals, notebooks, and IDE consoles without configuration.
+- **Small.** A focused utility, not a platform.
+
+## When not to use this
+
+- You need **persistent experiment storage**, run comparison, or metric visualization → use W&B, MLflow, or TensorBoard.
+- You have **hundreds of metrics** per row that need filtering, aggregation, or search → use a proper logging framework.
+- You need **structured output** (JSON, CSV) for downstream processing → write to a file directly.
+- Your runs take **under a minute** with two or three metrics → `print()` is fine.
 
 ## License
 
-MIT
+MIT · v0.1.0
