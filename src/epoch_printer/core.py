@@ -5,6 +5,15 @@ from math import isinf, isnan
 from typing import Any, Callable, Mapping, Sequence
 
 
+def _fmt_min_width(fmt: str) -> int:
+    for probe in (0.0, 0):
+        try:
+            return len(format(probe, fmt))
+        except (ValueError, TypeError):
+            continue
+    return 0
+
+
 @dataclass(frozen=True)
 class MetricCol:
     """
@@ -17,8 +26,9 @@ class MetricCol:
     title:
         Header label to display. Defaults to ``key`` when omitted.
     width:
-        Fixed display width for this column. Defaults to ``len(effective_title)``
-        when omitted so the header always fits exactly.
+        Fixed display width for this column. Defaults to the larger of
+        ``len(effective_title)`` and the minimum width implied by the format
+        spec, so both the header and a zero-valued cell always fit.
     fmt:
         Format specifier applied with Python's format mini-language.
     align:
@@ -40,7 +50,9 @@ class MetricCol:
 
     @property
     def effective_width(self) -> int:
-        return len(self.effective_title) if self.width is None else self.width
+        if self.width is not None:
+            return self.width
+        return max(len(self.effective_title), _fmt_min_width(self.fmt))
 
 
 class EpochTablePrinter:

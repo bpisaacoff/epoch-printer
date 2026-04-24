@@ -25,7 +25,7 @@ def test_metric_col_defaults():
     assert col.title is None
     assert col.width is None
     assert col.effective_title == "loss"
-    assert col.effective_width == 4
+    assert col.effective_width == 6  # max(len("loss")=4, len("0.0000")=6)
     assert col.fmt == ".4f"
     assert col.align == ">"
     assert col.transform is None
@@ -34,13 +34,13 @@ def test_metric_col_defaults():
 def test_metric_col_title_fallback():
     col = MetricCol("loss")
     assert col.effective_title == "loss"
-    assert col.effective_width == 4
+    assert col.effective_width == 6  # max(len("loss")=4, len("0.0000")=6)
 
 
 def test_metric_col_title_and_auto_width():
     col = MetricCol("loss", "Loss")
     assert col.effective_title == "Loss"
-    assert col.effective_width == 4
+    assert col.effective_width == 6  # max(len("Loss")=4, len("0.0000")=6)
 
 
 def test_metric_col_explicit_width_overrides():
