@@ -80,3 +80,23 @@ mem_printer.print_row(
 mem_printer.print_row(
     {"epoch": 3, "phase": "eval", "score": 0.913, "error_rate": 0.071, "gpu_mem_mb": 20480, "time": 3.9}
 )
+
+print()
+
+# --- Optional title and width defaults ---
+# title defaults to key; width defaults to len(title).
+
+print("Auto title and width (key used as header, sized to fit):")
+
+auto_printer = EpochTablePrinter(
+    [
+        MetricCol("epoch", fmt="d"),          # title="epoch", width=5
+        MetricCol("train_loss", fmt=".4e"),   # title="train_loss", width=10
+        MetricCol("val_loss", "Val", fmt=".4e"),  # explicit title, width=3
+        MetricCol("lr", "LR", width=10, fmt=".2e"),  # explicit title and width
+    ]
+)
+
+auto_printer.print_header()
+auto_printer.print_row({"epoch": 1, "train_loss": 0.1842, "val_loss": 0.2108, "lr": 1e-3})
+auto_printer.print_row({"epoch": 2, "train_loss": 0.1391, "val_loss": 0.1794, "lr": 5e-4})

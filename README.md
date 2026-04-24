@@ -153,8 +153,8 @@ A frozen dataclass that defines one column.
 | Field | Default | Description |
 |-------|---------|-------------|
 | `key` | — | Key expected in each row dict |
-| `title` | — | Header label |
-| `width` | `10` | Fixed display width |
+| `title` | `None` | Header label; defaults to `key` if omitted |
+| `width` | `None` | Fixed display width; defaults to `len(title)` if omitted |
 | `fmt` | `".4f"` | Python format specifier |
 | `align` | `">"` | Alignment: `">"`, `"<"`, or `"^"` |
 | `transform` | `None` | Optional callable applied before formatting |

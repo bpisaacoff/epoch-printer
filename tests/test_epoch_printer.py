@@ -21,11 +21,31 @@ from epoch_printer import (
 # ---------------------------------------------------------------------------
 
 def test_metric_col_defaults():
-    col = MetricCol("loss", "Loss")
-    assert col.width == 10
+    col = MetricCol("loss")
+    assert col.title is None
+    assert col.width is None
+    assert col.effective_title == "loss"
+    assert col.effective_width == 4
     assert col.fmt == ".4f"
     assert col.align == ">"
     assert col.transform is None
+
+
+def test_metric_col_title_fallback():
+    col = MetricCol("loss")
+    assert col.effective_title == "loss"
+    assert col.effective_width == 4
+
+
+def test_metric_col_title_and_auto_width():
+    col = MetricCol("loss", "Loss")
+    assert col.effective_title == "Loss"
+    assert col.effective_width == 4
+
+
+def test_metric_col_explicit_width_overrides():
+    col = MetricCol("loss", width=12)
+    assert col.effective_width == 12
 
 
 def test_metric_col_frozen():

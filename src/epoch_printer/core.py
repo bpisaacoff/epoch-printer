@@ -15,9 +15,10 @@ class MetricCol:
     key:
         Key expected in each row mapping.
     title:
-        Header label to display.
+        Header label to display. Defaults to ``key`` when omitted.
     width:
-        Fixed display width for this column.
+        Fixed display width for this column. Defaults to ``len(effective_title)``
+        when omitted so the header always fits exactly.
     fmt:
         Format specifier applied with Python's format mini-language.
     align:
@@ -27,11 +28,19 @@ class MetricCol:
     """
 
     key: str
-    title: str
-    width: int = 10
+    title: str | None = None
+    width: int | None = None
     fmt: str = ".4f"
     align: str = ">"
     transform: Callable[[Any], Any] | None = None
+
+    @property
+    def effective_title(self) -> str:
+        return self.key if self.title is None else self.title
+
+    @property
+    def effective_width(self) -> int:
+        return len(self.effective_title) if self.width is None else self.width
 
 
 class EpochTablePrinter:
@@ -64,7 +73,7 @@ class EpochTablePrinter:
 
     def header_str(self) -> str:
         """Return the header line as a string."""
-        parts = [f"{col.title:{col.align}{col.width}}" for col in self.columns]
+        parts = [f"{col.effective_title:{col.align}{col.effective_width}}" for col in self.columns]
         return self.sep.join(parts)
 
     def rule_str(self) -> str:
@@ -90,29 +99,29 @@ class EpochTablePrinter:
 
     def _format_cell(self, col: MetricCol, value: Any) -> str:
         if value is None:
-            return f"{self.missing:{col.align}{col.width}}"
+            return f"{self.missing:{col.align}{col.effective_width}}"
 
         if col.transform is not None:
             value = col.transform(value)
 
         if isinstance(value, float):
             if isnan(value):
-                return f"{'nan':{col.align}{col.width}}"
+                return f"{'nan':{col.align}{col.effective_width}}"
             if isinf(value):
                 text = "inf" if value > 0 else "-inf"
-                return f"{text:{col.align}{col.width}}"
+                return f"{text:{col.align}{col.effective_width}}"
 
         # Python format specs don't truncate strings; enforce width manually.
-        if isinstance(value, str) and len(value) > col.width:
-            value = value[: max(1, col.width - 1)] + "\u2026"
+        if isinstance(value, str) and len(value) > col.effective_width:
+            value = value[: max(1, col.effective_width - 1)] + "\u2026"
 
         try:
-            return f"{value:{col.align}{col.width}{col.fmt}}"
+            return f"{value:{col.align}{col.effective_width}{col.fmt}}"
         except (ValueError, TypeError):
             text = str(value)
-            if len(text) > col.width:
-                text = text[: max(1, col.width - 1)] + "\u2026"
-            return f"{text:{col.align}{col.width}}"
+            if len(text) > col.effective_width:
+                text = text[: max(1, col.effective_width - 1)] + "\u2026"
+            return f"{text:{col.align}{col.effective_width}}"
 
 
 #: Friendly alias for :class:`EpochTablePrinter`.
