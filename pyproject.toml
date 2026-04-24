@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "epoch-printer"
-version = "0.1.0"
+version = "0.2.0"
 description = "Lightweight fixed-width metric table printer for ML training loops"
 readme = "README.md"
 license = { text = "MIT" }
