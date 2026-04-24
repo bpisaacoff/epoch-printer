@@ -90,15 +90,14 @@ def results_to_dataframe(results: Iterable[Mapping[str, Any]]):
     """
     Convert a sequence of row dicts into a pandas DataFrame.
 
-    Requires pandas. Install with ``pip install pandas`` or
-    ``pip install epoch-printer[pandas]``.
+    Requires pandas. Install with ``pip install "epoch-printer[pandas]"``.
     """
     try:
         import pandas as pd
     except ImportError as exc:
         raise ImportError(
             "pandas is required for results_to_dataframe. "
-            "Install it with: pip install pandas"
+            'Install it with: pip install "epoch-printer[pandas]"'
         ) from exc
     return pd.DataFrame(results)
 

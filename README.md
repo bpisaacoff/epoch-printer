@@ -1,6 +1,6 @@
 # epoch-printer
 
-Readable fixed-width epoch tables for ML training loops, with no required dependencies.
+`epoch-printer` is a lightweight console table utility for ML training loops. It makes live metrics readable at a glance — without adopting a full experiment tracking platform or rewriting print formatting for every experiment.
 
 ```
   Ep          LR    TrainLoss      ValLoss      T_MAE      V_MAE     T_RMSE     V_RMSE   V_Corr   V_ExpVar      Time
@@ -15,12 +15,12 @@ Readable fixed-width epoch tables for ML training loops, with no required depend
 Training loop output usually falls into one of three patterns:
 
 1. `print(f"epoch {epoch}, loss {loss:.4f}")` — fine for 2 metrics, messy for 10.
-2. Full experiment trackers (W&B, MLflow, TensorBoard) — great for dashboards, overkill for a terminal window.
+2. Full experiment trackers (W&B, MLflow, TensorBoard) — great for dashboards, but setting one up for a quick experiment adds overhead and context-switching.
 3. Custom formatting code — rewritten per project, fragile when the metric set changes.
 
 `epoch-printer` gives you a fixed-width table that is easy to scan while training is running, defined once per project, and portable across scripts, notebooks, and IDE consoles. It handles missing values, `nan`/`inf`, and column alignment automatically.
 
-This is **not a replacement for experiment trackers**. Use it alongside W&B or MLflow for readable stdout while your dashboard updates in the background.
+This is **not a replacement for experiment trackers**. Use it alongside W&B or MLflow for readable live stdout while your dashboard updates in the background.
 
 ## Installation
 
@@ -61,7 +61,7 @@ for epoch in range(1, num_epochs + 1):
     })
 ```
 
-`make_epoch_columns()` provides a default schema (epoch, LR, loss, MAE, RMSE, correlation, explained variance, time). Keys absent from the row dict render as `--`.
+`make_epoch_columns()` provides a default schema (epoch, LR, loss, MAE, RMSE, correlation, explained variance, time). Keys absent from the row dict, or keys whose value is explicitly `None`, both render as `--`. There is no distinction between a missing key and an explicit `None`.
 
 ## Common workflows
 
@@ -109,11 +109,13 @@ Apply a transform to convert raw values before display (e.g. MiB → GiB):
 MetricCol("gpu_mem_mb", "GPU_GiB", width=8, fmt=".2f", transform=lambda x: x / 1024)
 ```
 
+Transforms are applied at render time during `print_row()`. If a transform raises an exception, it propagates — handle errors inside the transform if needed. Transforms are **not** called when the column value is `None` or missing (those render as `--` instead).
+
 See [`examples/custom_research_metrics.py`](examples/custom_research_metrics.py) for more patterns including VAE training and table formatting options.
 
 ### Notebook summaries
 
-Collect rows during training, then convert to a styled DataFrame at the end of the cell:
+The live table gives you per-epoch feedback while training is running. At the end of the cell, convert collected rows to a styled DataFrame for easy post-run review:
 
 ```python
 from epoch_printer import (
@@ -127,7 +129,7 @@ printer.print_header()
 
 for epoch in range(1, num_epochs + 1):
     row = {"epoch": epoch, "lr": ..., "train_loss": ..., "val_loss": ..., "time": ...}
-    printer.print_row(row)
+    printer.print_row(row)   # live output during training
     results.append(row)
 
 # At end of notebook cell — renders as styled HTML table in Jupyter:
@@ -138,10 +140,11 @@ See [`examples/notebook_summary.py`](examples/notebook_summary.py) for a runnabl
 
 ### Alongside W&B / TensorBoard / MLflow
 
-`epoch-printer` only writes to stdout. Pass the same row dict to your experiment tracker:
+`epoch-printer` only writes to stdout. Use the same underlying training metrics for both console output and experiment tracking — tracker calls may need light filtering for fields like `"epoch"` (which maps to `step` in most trackers):
 
 ```python
 import wandb
+import mlflow
 from epoch_printer import EpochPrinter, make_epoch_columns
 
 wandb.init(project="my-experiment")
@@ -149,9 +152,22 @@ printer = EpochPrinter(make_epoch_columns())
 printer.print_header()
 
 for epoch in range(1, num_epochs + 1):
-    row = {"epoch": epoch, "lr": ..., "train_loss": ..., "val_loss": ..., "time": ...}
-    wandb.log(row, step=epoch)   # to W&B
-    printer.print_row(row)       # to stdout
+    metrics = {
+        "epoch":      epoch,
+        "lr":         scheduler.get_last_lr()[0],
+        "train_loss": train_metrics["loss"],
+        "val_loss":   val_metrics["loss"],
+        "time":       time.time() - t0,
+    }
+
+    printer.print_row(metrics)   # live stdout
+
+    # Pass the same underlying data to your tracker, filtered as needed:
+    wandb.log(metrics, step=epoch)
+    mlflow.log_metrics(
+        {k: v for k, v in metrics.items() if k != "epoch"},
+        step=epoch,
+    )
 ```
 
 See [`examples/logger_integration.py`](examples/logger_integration.py) for a version that also mocks TensorBoard and MLflow log calls.
@@ -169,7 +185,7 @@ Frozen dataclass defining one column.
 | `width` | `None` | Fixed display width; defaults to `len(title)` if omitted |
 | `fmt` | `".4f"` | Python format specifier (e.g. `"d"`, `".2e"`, `".2%"`, `"s"`) |
 | `align` | `">"` | Alignment: `">"` (right), `"<"` (left), or `"^"` (center) |
-| `transform` | `None` | Optional callable applied to the raw value before formatting |
+| `transform` | `None` | Optional callable applied to the raw value before formatting. Not called when the value is `None`. Exceptions propagate to the caller. |
 
 ### `EpochTablePrinter` / `EpochPrinter`
 
@@ -189,7 +205,7 @@ printer.format_row(row)    # returns formatted row string
 |-----------|---------|-------------|
 | `columns` | — | Ordered sequence of `MetricCol` definitions |
 | `sep` | `"  "` | Separator between columns |
-| `missing` | `"--"` | Placeholder for absent or `None` keys |
+| `missing` | `"--"` | Placeholder rendered for absent keys or explicit `None` values; no distinction is made between the two |
 | `header_rule` | `True` | Dashed rule beneath the header |
 | `vertical_lines` | `False` | `" | "` separators between columns |
 | `row_lines` | `False` | Dashed rule after every data row |
@@ -210,14 +226,14 @@ printer.format_row(row)    # returns formatted row string
 | `results_to_dataframe(rows)` | Converts a list of row dicts to a DataFrame |
 | `style_results_dataframe(df)` | Returns a pandas Styler with standard metric formatting |
 
-Install with `pip install pandas` or `pip install "epoch-printer[pandas]"`.
+Install with `pip install "epoch-printer[pandas]"`.
 
 ## Design choices
 
 - **No required dependencies.** Core functionality uses only the standard library.
 - **Explicit schema.** Every displayed metric is declared in a column definition; nothing is inferred silently.
 - **Stable column order.** Positions never shift from row to row, making it easy to scan vertically during a long run.
-- **Row dicts, not keyword arguments.** The same dict you pass to `wandb.log` or `mlflow.log_metrics` works here without modification.
+- **Row dicts, not keyword arguments.** Use the same underlying training metrics for both console output and experiment tracking, while keeping display formatting separate.
 - **Portable.** Plain-text output works in terminals, notebooks, and IDE consoles without configuration.
 - **Small.** A focused utility, not a platform.
 

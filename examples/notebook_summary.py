@@ -8,8 +8,7 @@ Run this script directly to see plain-text output.
 In a Jupyter notebook, the final style_results_dataframe() call renders as
 a styled HTML table.
 
-Optional pandas dependency: pip install pandas
-                        or: pip install "epoch-printer[pandas]"
+Optional pandas dependency: pip install "epoch-printer[pandas]"
 """
 import math
 import random
@@ -66,4 +65,4 @@ try:
     print("  style_results_dataframe(df)")
 except ImportError:
     print("Install pandas to see the DataFrame summary:")
-    print("  pip install pandas  or  pip install 'epoch-printer[pandas]'")
+    print("  pip install \"epoch-printer[pandas]\"")

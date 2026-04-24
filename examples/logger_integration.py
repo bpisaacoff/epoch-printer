@@ -3,7 +3,9 @@ Experiment tracker integration example.
 
 Shows how to use epoch-printer alongside W&B, TensorBoard, and MLflow.
 epoch-printer only writes to stdout; your tracker handles persistence and
-visualization. The same row dict can be passed to both without modification.
+visualization. Use the same underlying training metrics for both — tracker
+calls may need light filtering (e.g. excluding "epoch" from MLflow log_metrics,
+which expects only numeric scalars and uses step as the epoch counter).
 
 All tracker calls are mocked — no external packages required to run this file.
 Replace the mock classes with real tracker objects to use in your project.
@@ -80,14 +82,14 @@ for epoch in range(1, NUM_EPOCHS + 1):
     # epoch-printer: readable stdout ----------------------------------------
     printer.print_row(row)
 
-    # W&B: full row dict, same keys -----------------------------------------
-    wandb.log(row, step=epoch)
+    # W&B: log the same metrics dict; "epoch" is redundant with step but harmless
+    wandb.log({k: v for k, v in row.items() if k != "epoch"}, step=epoch)
 
     # TensorBoard: group scalars by category --------------------------------
     writer.add_scalars("loss",     {"train": row["train_loss"], "val": row["val_loss"]}, epoch)
     writer.add_scalars("accuracy", {"val": row["val_acc"]}, epoch)
 
-    # MLflow: exclude non-numeric fields like "epoch" if needed -------------
+    # MLflow: log_metrics expects numeric scalars; exclude "epoch" since step covers it
     mlflow.log_metrics({k: v for k, v in row.items() if k != "epoch"}, step=epoch)
 
 writer.close()
